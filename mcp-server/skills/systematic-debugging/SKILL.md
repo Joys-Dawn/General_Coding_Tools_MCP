@@ -1,6 +1,6 @@
 ---
 name: systematic-debugging
-description: Guides root-cause analysis with a structured process: reproduce, isolate, hypothesize, verify. Use when debugging bugs, investigating failures, or when the user says something is broken or not working as expected.
+description: "Guides root-cause analysis with a structured process: reproduce, isolate, hypothesize, verify. Use when debugging bugs, investigating failures, or when the user says something is broken or not working as expected."
 ---
 # Systematic Debugging
 
