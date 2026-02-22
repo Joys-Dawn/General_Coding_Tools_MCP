@@ -16,13 +16,13 @@ Structured processes and checklists the model can follow when you ask for that k
 | **best-practices-audit** | Audits against DRY, SOLID, KISS, YAGNI, Clean Code, and similar. Use when you want to check standards, reduce anti-patterns, or improve maintainability. |
 | **feature-planning** | Plans a feature before coding: context, requirements, design (behavior, data, API, state), implementation steps, and quality/risk. Use when you say "plan this feature" or "design this." |
 
-Each skill can be read as a resource, fetched with the `get_skill` tool, or applied via the `apply_skill_*` prompts with your request.
+Each skill can be read as a resource, fetched with the `get_skill` tool, or applied with the `apply_skill` tool (pass your request as `message_to_skill`).
 
 ---
 
 ## Subagents
 
-Focused "agents" for specific tasks. Use their prompts or `get_subagent` to get their full instructions.
+Focused "agents" for specific tasks. Use `get_subagent` or the `apply_subagent` tool (pass your request as `message_to_subagent`) to load and launch them.
 
 | Subagent | What it does |
 |----------|----------------|
@@ -51,7 +51,7 @@ If you use a local clone instead of npm, point `command` to `node` and `args` to
 
 **Tools:** `list_skills`, `list_subagents`, `get_skill`, `get_subagent` — use these to discover and load full skill/subagent content.
 
-**Prompts:** `apply_skill_*` and `apply_subagent_*` — pass a `user_message` to get a prompt that includes the skill or subagent instructions plus your request.
+**Tools:** `apply_skill` and `apply_subagent` — pass the user's request as `message_to_skill` or `message_to_subagent` so no extra input is needed.
 
 **Resources:** URIs like `general-coding-tools-mcp://skill/systematic-debugging` and `general-coding-tools-mcp://subagent/deep-research` for direct reads.
 

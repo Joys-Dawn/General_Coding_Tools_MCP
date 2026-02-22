@@ -17,5 +17,5 @@ Use this guide to choose the right skill or subagent for the user's request.
 
 ## Skills vs subagents
 
-- **Skills** = step-by-step instructions the main agent follows (e.g. run a process, produce a report). Use `get_skill` / `apply_skill_*` and follow the skill in the current context.
+- **Skills** = step-by-step instructions the main agent follows (e.g. run a process, produce a report). Use `get_skill` or `apply_skill` (with the user's prompt as message_to_skill) and follow the skill in the current context.
 - **Subagents** = separate agents run in another context; they return one result. Use when the task is noisy, context-heavy, or matches a subagent’s description (e.g. “use deep-research”, “run the verifier”).

@@ -57,12 +57,19 @@ function loadContent(): {
   return JSON.parse(raw);
 }
 
+function loadVersion(): string {
+  const pkgPath = join(__dirname, "..", "package.json");
+  if (!existsSync(pkgPath)) return "1.0.0";
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  return typeof pkg.version === "string" ? pkg.version : "1.0.0";
+}
+
 const DATA = loadContent();
 const RESOURCE_PREFIX = "general-coding-tools-mcp://";
 
 const server = new McpServer({
   name: "general-coding-tools-mcp",
-  version: "1.0.0",
+  version: loadVersion(),
 });
 
 // --- Meta resources: catalog, when-to-use, overview ---
@@ -168,7 +175,7 @@ server.registerTool(
   "list_subagents",
   {
     title: "List subagents",
-    description: "List all available General Coding Tools subagents (e.g. deep-research, update-docs, verifier).",
+    description: "List all available General Coding Tools subagents (e.g. deep-research, update-docs, verifier). Subagents run in a separate agent context and return one result; use apply_subagent tool to launch.",
     inputSchema: z.object({}),
   },
   async () => {
@@ -208,7 +215,7 @@ server.registerTool(
   "get_subagent",
   {
     title: "Get subagent content",
-    description: "Get the full content of a subagent by name (id). Use list_subagents to see available names.",
+    description: "Get the full content of a subagent by name (id). Use list_subagents to see available names. Subagents are intended to be launched via apply_subagent (separate run), not followed in the current context.",
     inputSchema: z.object({
       name: z.string().max(200).describe("Subagent id (e.g. deep-research, update-docs, verifier)"),
     }),
@@ -226,55 +233,73 @@ server.registerTool(
   }
 );
 
-// --- Prompts: apply skill / subagent with user message ---
-for (const s of DATA.skills) {
-  const promptName = `apply_skill_${s.id.replace(/-/g, "_")}`;
-  server.registerPrompt(
-    promptName,
-    {
-      title: `Apply skill: ${s.name}`,
-      description: `Apply the "${s.name}" skill. Use when the user wants to follow this skill's process.`,
-      argsSchema: {
-        user_message: z.string().describe("What the user asked or the current task"),
-      },
-    },
-    async ({ user_message }) => {
-      const entry = DATA.content.skills[s.name];
-      const safeMessage = escapeForEmbedding(String(user_message ?? "(no message provided)"));
-      const text = `I will follow the **${s.name}** skill.\n\n---\n\n${entry.content}\n\n---\n\nUser request: ${safeMessage}`;
+// --- Tool: apply_skill (agent passes user's prompt as message_to_skill so no extra form) ---
+server.registerTool(
+  "apply_skill",
+  {
+    title: "Apply a skill",
+    description:
+      "Load a skill and optionally scope it with the user's request. Pass the user's prompt (e.g. 'do security audit', 'audit the auth module') as message_to_skill so the skill has context without asking for input again. Returns the full skill content to follow in the current context.",
+    inputSchema: z.object({
+      name: z.string().max(200).describe("Skill id (e.g. systematic-debugging, security-audit)"),
+      message_to_skill: z
+        .string()
+        .max(4000)
+        .optional()
+        .describe(
+          "The user's request or scope — pass their message (e.g. 'security audit the auth module'). Use this when the user said what to do; avoids asking them again."
+        ),
+    }),
+  },
+  async ({ name, message_to_skill }) => {
+    const skill = DATA.skills.find((s) => s.id === name || s.name === name);
+    if (!skill) {
       return {
-        messages: [
-          { role: "user" as const, content: { type: "text" as const, text: String(user_message ?? "") } },
-          { role: "assistant" as const, content: { type: "text" as const, text } },
-        ],
+        content: [{ type: "text" as const, text: `Unknown skill: ${escapeForEmbedding(name)}. Use list_skills to see available skills.` }],
+        isError: true,
       };
     }
-  );
-}
-for (const a of DATA.subagents) {
-  const promptName = `apply_subagent_${a.id.replace(/-/g, "_")}`;
-  server.registerPrompt(
-    promptName,
-    {
-      title: `Apply subagent: ${a.name}`,
-      description: `Apply the "${a.name}" subagent. Use when the user wants this agent's behavior.`,
-      argsSchema: {
-        user_message: z.string().describe("What the user asked or the current task"),
-      },
-    },
-    async ({ user_message }) => {
-      const entry = DATA.content.subagents[a.name];
-      const safeMessage = escapeForEmbedding(String(user_message ?? "(no message provided)"));
-      const text = `I will follow the **${a.name}** subagent.\n\n---\n\n${entry.content}\n\n---\n\nUser request: ${safeMessage}`;
+    const entry = DATA.content.skills[skill.name];
+    const extra = (message_to_skill ?? "").trim();
+    const taskBlock = extra ? `\n\n**Task / scope:**\n${escapeForEmbedding(extra)}\n\n---\n\n` : "\n\n";
+    const text = `I will follow the **${skill.name}** skill.${taskBlock}${entry.content}`;
+    return { content: [{ type: "text" as const, text }] };
+  }
+);
+
+// --- Tool: apply_subagent (agent passes user's prompt as message_to_subagent) ---
+server.registerTool(
+  "apply_subagent",
+  {
+    title: "Apply a subagent",
+    description:
+      "Load a subagent and optionally scope it with the user's request. Pass the user's prompt (e.g. 'run deep research on X', 'verify the last change') as message_to_subagent so no extra input is needed. Returns instructions to launch the subagent in a separate context.",
+    inputSchema: z.object({
+      name: z.string().max(200).describe("Subagent id (e.g. deep-research, update-docs, verifier)"),
+      message_to_subagent: z
+        .string()
+        .max(4000)
+        .optional()
+        .describe(
+          "The user's request or context — pass their message. Use this when the user said what they want; avoids asking again."
+        ),
+    }),
+  },
+  async ({ name, message_to_subagent }) => {
+    const subagent = DATA.subagents.find((a) => a.id === name || a.name === name);
+    if (!subagent) {
       return {
-        messages: [
-          { role: "user" as const, content: { type: "text" as const, text: String(user_message ?? "") } },
-          { role: "assistant" as const, content: { type: "text" as const, text } },
-        ],
+        content: [{ type: "text" as const, text: `Unknown subagent: ${escapeForEmbedding(name)}. Use list_subagents to see available subagents.` }],
+        isError: true,
       };
     }
-  );
-}
+    const entry = DATA.content.subagents[subagent.name];
+    const extra = (message_to_subagent ?? "").trim();
+    const taskBlock = extra ? `\n\n**Task / context for subagent:**\n${escapeForEmbedding(extra)}` : "";
+    const text = `**Launch the ${subagent.name} subagent** (separate context). Do not follow these instructions in this chat — the client must start a subagent run with the content below. The subagent runs in another context and returns one result.${taskBlock}\n\n---\n\n${entry.content}`;
+    return { content: [{ type: "text" as const, text }] };
+  }
+);
 
 // --- Run ---
 async function main() {
