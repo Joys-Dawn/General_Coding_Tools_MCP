@@ -1,9 +1,11 @@
 /**
  * Bundles skills/ and subagents/ (inside mcp-server) into dist/content.json so the server is self-contained.
+ * Writes dist/content.json.sha256 for runtime integrity verification.
  * Run from mcp-server: node scripts/bundle-content.cjs (e.g. via npm run build).
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 // __dirname = mcp-server/scripts, so ROOT = mcp-server
 const ROOT = path.resolve(__dirname, '..');
@@ -90,5 +92,8 @@ const output = {
 };
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
-fs.writeFileSync(OUT_FILE, JSON.stringify(output, null, 0), 'utf8');
+const jsonContent = JSON.stringify(output, null, 0);
+fs.writeFileSync(OUT_FILE, jsonContent, 'utf8');
+const hash = crypto.createHash('sha256').update(jsonContent, 'utf8').digest('hex');
+fs.writeFileSync(OUT_FILE + '.sha256', hash + '\n', 'utf8');
 console.log('Bundled', skillsData.skills.length, 'skills and', subagentsData.subagents.length, 'subagents into', OUT_FILE);
