@@ -32,6 +32,9 @@ function loadContent(): {
   content: {
     skills: Record<string, { content: string; reference: string | null }>;
     subagents: Record<string, { content: string }>;
+    catalog?: string;
+    whenToUse?: string;
+    overview?: string;
   };
 } {
   const contentPath = join(__dirname, "content.json");
@@ -61,6 +64,35 @@ const server = new McpServer({
   name: "general-coding-tools-mcp",
   version: "1.0.0",
 });
+
+// --- Meta resources: catalog, when-to-use, overview ---
+if (DATA.content.catalog) {
+  const uri = `${RESOURCE_PREFIX}catalog`;
+  server.registerResource(
+    "catalog",
+    uri,
+    { title: "Catalog", description: "List of all skills and subagents with descriptions", mimeType: "text/markdown" },
+    async () => ({ contents: [{ uri, mimeType: "text/markdown", text: DATA.content.catalog! }] })
+  );
+}
+if (DATA.content.whenToUse) {
+  const uri = `${RESOURCE_PREFIX}when-to-use`;
+  server.registerResource(
+    "when-to-use",
+    uri,
+    { title: "When to use", description: "Guide to choose the right skill or subagent for a request", mimeType: "text/markdown" },
+    async () => ({ contents: [{ uri, mimeType: "text/markdown", text: DATA.content.whenToUse! }] })
+  );
+}
+if (DATA.content.overview) {
+  const uri = `${RESOURCE_PREFIX}overview`;
+  server.registerResource(
+    "overview",
+    uri,
+    { title: "Overview", description: "What this MCP server is and how to use it", mimeType: "text/markdown" },
+    async () => ({ contents: [{ uri, mimeType: "text/markdown", text: DATA.content.overview! }] })
+  );
+}
 
 // --- Resources: one per skill, skill/reference, and subagent ---
 for (const s of DATA.skills) {

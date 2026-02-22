@@ -1,6 +1,6 @@
 {
   "name": "general-coding-tools-mcp",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "MCP server exposing General Coding Tools (skills and subagents) for use in Cursor, Claude, and Smithery",
   "type": "module",
   "main": "dist/index.js",

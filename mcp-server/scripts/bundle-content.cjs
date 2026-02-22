@@ -29,11 +29,19 @@ function readDirRecursive(dir, base = dir) {
   return result;
 }
 
-function extractNameFromFrontmatter(content) {
+function extractFrontmatter(content) {
   const match = content.match(/^---\s*\n([\s\S]*?)\n---/);
-  if (!match) return null;
-  const nameMatch = match[1].match(/name:\s*(.+)/);
-  return nameMatch ? nameMatch[1].trim() : null;
+  if (!match) return { name: null, description: null };
+  const block = match[1];
+  const nameMatch = block.match(/name:\s*(.+)/);
+  const descMatch = block.match(/description:\s*(.+)/);
+  const name = nameMatch ? nameMatch[1].trim().replace(/^["']|["']$/g, '') : null;
+  let desc = descMatch ? descMatch[1].trim() : null;
+  if (desc && (desc.startsWith('"') || desc.startsWith("'"))) desc = desc.slice(1, -1);
+  return { name, description: desc };
+}
+function extractNameFromFrontmatter(content) {
+  return extractFrontmatter(content).name;
 }
 
 function buildSkills() {
@@ -46,10 +54,12 @@ function buildSkills() {
     const refPath = path.join(skillDir, 'REFERENCE.md');
     if (!fs.existsSync(skillPath)) continue;
     const skillContent = fs.readFileSync(skillPath, 'utf8');
-    const name = extractNameFromFrontmatter(skillContent) || d.name;
+    const fm = extractFrontmatter(skillContent);
+    const name = fm.name || d.name;
     byName[name] = {
       id: d.name,
       name,
+      description: fm.description || '',
       content: skillContent,
       reference: fs.existsSync(refPath) ? fs.readFileSync(refPath, 'utf8') : null,
     };
@@ -64,12 +74,49 @@ function buildSubagents() {
   const files = fs.readdirSync(SUBAGENTS_DIR).filter(f => f.endsWith('.md'));
   for (const f of files) {
     const content = fs.readFileSync(path.join(SUBAGENTS_DIR, f), 'utf8');
-    const name = extractNameFromFrontmatter(content) || path.basename(f, '.md');
+    const fm = extractFrontmatter(content);
+    const name = fm.name || path.basename(f, '.md');
     const id = path.basename(f, '.md');
-    byName[name] = { id, name, content };
+    byName[name] = { id, name, description: fm.description || '', content };
   }
   const subagents = Object.values(byName).map(s => ({ id: s.id, name: s.name }));
   return { subagents, byName };
+}
+
+function buildCatalog(skillsData, subagentsData) {
+  const lines = ['# Catalog', '', '## Skills', ''];
+  for (const s of skillsData.skills) {
+    const entry = skillsData.byName[s.name];
+    const desc = entry?.description || '(no description)';
+    lines.push(`- **${s.name}** (id: \`${s.id}\`) — ${desc}`);
+  }
+  lines.push('', '## Subagents', '');
+  for (const a of subagentsData.subagents) {
+    const entry = subagentsData.byName[a.name];
+    const desc = entry?.description || '(no description)';
+    lines.push(`- **${a.name}** (id: \`${a.id}\`) — ${desc}`);
+  }
+  return lines.join('\n');
+}
+
+function readWhenToUse() {
+  const p = path.join(ROOT, 'docs', 'when-to-use.md');
+  return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+}
+
+function buildOverview() {
+  const pkgPath = path.join(ROOT, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  const lines = [
+    '# Overview',
+    '',
+    `**${pkg.name}** — ${pkg.description}`,
+    '',
+    `Version: \`${pkg.version || 'unknown'}\``,
+    '',
+    'Use the **catalog** resource for a list of skills and subagents. Use **when-to-use** to choose the right one for the request.',
+  ];
+  return lines.join('\n');
 }
 
 const skillsData = buildSkills();
@@ -88,6 +135,9 @@ const output = {
     subagents: Object.fromEntries(
       Object.entries(subagentsData.byName).map(([k, v]) => [k, { content: v.content }])
     ),
+    catalog: buildCatalog(skillsData, subagentsData),
+    whenToUse: readWhenToUse(),
+    overview: buildOverview(),
   },
 };
 
