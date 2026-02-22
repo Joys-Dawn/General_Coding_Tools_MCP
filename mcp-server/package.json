@@ -1,0 +1,32 @@
+{
+  "name": "general-coding-tools-mcp",
+  "version": "1.0.0",
+  "description": "MCP server exposing General Coding Tools (skills and subagents) for use in Cursor, Claude, and Smithery",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "general-coding-tools-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "node scripts/bundle-content.cjs && tsc",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["mcp", "cursor", "smithery", "skills", "general-coding-tools"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
