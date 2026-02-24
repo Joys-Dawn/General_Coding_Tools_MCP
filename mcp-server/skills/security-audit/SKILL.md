@@ -220,6 +220,59 @@ ruff check --select S .   # Bandit security rules
 2. Critical CVEs or injection/auth findings → **Critical**. Outdated deps with low-severity CVEs → **Warning** or **Suggestion**.
 3. If a tool is not present or produces no findings, note "npm audit: clean" etc. in the Summary.
 
+## API & Tech Stack Verification
+
+Before finalizing findings, verify security-relevant API and SDK usage against official documentation:
+
+- **Look up official docs**: If the code uses a specific SDK, API, or service (e.g. Supabase auth, Stripe, OAuth providers), consult the official documentation to confirm the correct security usage pattern. Do not rely on training knowledge — APIs change, and incorrect usage is frequently a **Critical** security flaw that looks correct to a code reviewer.
+- **Use available MCP tools**: Check if available MCP tools (Supabase MCP, Vercel MCP, etc.) can provide faster or more authoritative access to official docs.
+- **Wrong API usage = security finding**: If code uses an API in a non-standard or incorrect way that bypasses security controls (e.g. trusting client-side session data instead of server-side verification), it **must** be reported as a finding at the appropriate severity — not treated as a style issue.
+
+## False Positive Filtering
+
+Before including any finding in the report, apply these filters in order. A report with 3 real findings is more valuable than one with 3 real findings buried in 12 noise items.
+
+### Hard Exclusions
+
+Automatically exclude findings that match these categories — do not report them even as Low:
+
+1. **Pure DoS / resource exhaustion** without an auth bypass or data-integrity component. Domain 8 items belong in the report only when combined with another vulnerability class (e.g., unbounded query + missing auth = Critical, unbounded query alone = excluded).
+2. **Theoretical race conditions** without a concrete exploitation path. Only report a race condition if you can describe the specific interleaving of requests that causes harm (e.g., double-spend). "This read-modify-write *could* race" is not a finding.
+3. **Outdated dependency versions** — these are surfaced by `npm audit` / `bun audit` output in the Summary section. Do not create individual findings for known CVEs in third-party libraries; that is the dependency scanner's job.
+4. **Missing hardening with no attack vector** — e.g., "should add CSP header" when there is no XSS vector in the application, or "should add rate limiting" on an internal-only endpoint. A missing defense layer is only a finding when the attack it defends against is actually possible.
+5. **Test-only code** — unit tests, fixtures, test helpers, mocks, and seed scripts. Exception: test files that contain real secrets or credentials.
+6. **Log spoofing / unsanitized log output** — unless the log output feeds a downstream system that parses and acts on log content (SIEM injection, log-based alerting bypass).
+7. **Regex injection / ReDoS** — unless the regex runs on untrusted input in a hot path with no timeout and you can demonstrate catastrophic backtracking.
+8. **Documentation-only files** — markdown, JSDoc comments, README content. These are not executable.
+9. **Client-side validation gaps when server-side validation exists** — missing Zod schema in a React form is a UX concern, not a security finding, if the API endpoint validates the same input.
+10. **SSRF limited to path control** — only report SSRF when the attacker can control the host or protocol. Path-only SSRF is not exploitable in practice.
+11. **Memory safety issues in memory-safe languages** — buffer overflows, use-after-free, etc. are impossible in TypeScript, Python, Go, Rust, and Java. Do not report them.
+12. **Secrets or credentials stored on disk** if they are otherwise secured (e.g., encrypted at rest, in a secrets vault, or managed by a dedicated process).
+
+### Framework & Language Precedents
+
+These are established rulings — patterns that are NOT vulnerabilities by themselves:
+
+1. **React / Angular / Vue are XSS-safe by default.** Only flag XSS when using `dangerouslySetInnerHTML`, `bypassSecurityTrustHtml`, `v-html`, `[innerHTML]`, or equivalent escape hatches. Normal JSX interpolation (`{userInput}`) is auto-escaped.
+2. **UUIDs (v4) are unguessable.** Don't flag UUID-based resource access as IDOR unless the real issue is missing ownership verification (the problem is the missing WHERE clause, not the identifier format).
+3. **Environment variables and CLI flags are trusted input.** Attacks requiring attacker-controlled env vars are invalid in standard deployment models. Do not flag `process.env.X` as "unsanitized input."
+4. **Client-side code does not need auth checks.** The backend is responsible for authorization. Missing permission guards in React components, API client wrappers, or frontend route guards are not security findings — they are UX decisions.
+5. **GitHub Actions: most injection vectors are not exploitable.** Only flag when untrusted input (PR title, branch name, issue body, commit message) flows into `run:` steps via `${{ }}` expression injection without intermediate sanitization.
+6. **Jupyter notebooks run locally.** Only flag if untrusted external input reaches code execution, not just because a cell calls `eval()` on a hardcoded string.
+7. **Shell scripts with no untrusted input are safe.** Command injection requires untrusted user input flowing into the script. Scripts that only process env vars, hardcoded paths, or pipeline-internal values are not vulnerable.
+8. **`JSON.parse()` is not a vulnerability.** Only a finding if the parsed result is used without validation in a security-critical path (auth decisions, financial calculations, SQL query construction).
+9. **Logging non-PII data is safe.** Only report logging findings when secrets (passwords, tokens, API keys) or personally identifiable information is written to logs. Logging URLs, request metadata, or error messages is not a vulnerability.
+
+### Confidence Gate
+
+Before including any finding, answer these three questions:
+
+1. **Concrete attack path?** Can you describe the specific HTTP request, API call, or user action an attacker would use? If not, it's a code smell, not a finding.
+2. **Reasonable disagreement?** Could a competent security engineer argue this is not a vulnerability given the application's threat model? If yes, downgrade to a "Needs Investigation" note in the Summary.
+3. **Specific location?** Does the finding have an exact file path, line number, and reproduction scenario? Vague findings ("the app should use HTTPS somewhere") are not actionable and must be excluded.
+
+If any question raises doubt, do not report it as a formal finding. Instead, add a brief "Needs Investigation" note in the Summary section so the developer is aware without the noise.
+
 ## Output Format
 
 Group findings by severity. Each finding **must** name the specific standard violated.
@@ -249,6 +302,9 @@ Best-practice deviations, hardening opportunities, or compliance gaps unlikely t
 
 (same structure)
 
+## Needs Investigation (optional)
+Brief notes on patterns that warrant a closer look but did not pass the Confidence Gate. These are not formal findings.
+
 ## Summary
 - Total findings: N (X critical, Y high, Z medium, W low)
 - Highest-risk area: name the domain with the most severe findings
@@ -263,7 +319,8 @@ Best-practice deviations, hardening opportunities, or compliance gaps unlikely t
 - **Model the attack**: every Critical or High finding must describe the realistic attack scenario, not just the code smell.
 - **Be specific**: always cite file paths and line numbers.
 - **Be actionable**: every finding must include a concrete fix — not "add validation" but "use a Zod schema on the request body and reject with 400 if it fails."
-- **Severity by exploitability**: rate severity by real-world exploitability and impact, not theoretical worst-case.
+- **Severity by exploitability**: rate severity by real-world exploitability and impact, not theoretical worst-case. A missing CSP header with no XSS vector is Low at most. A SQL injection in a public endpoint is Critical regardless of whether a WAF might catch it.
 - **Don't duplicate best-practices-audit**: focus on security vulnerabilities and compliance gaps. Architecture and clean code issues belong in the other skill.
-- **No false positives over findings**: if something is ambiguous, note it as a question for the developer rather than flagging it as a violation.
+- **Minimize false positives**: Apply the False Positive Filtering rules (Hard Exclusions, Framework Precedents, Confidence Gate) before including any finding. When uncertain, add a "Needs Investigation" note in the Summary rather than reporting a formal finding. A clean report with 3 real findings is more valuable than one with 3 real findings buried in 12 noise items.
+- **Verify API usage against official docs**: Do not assume an API or SDK is being used correctly based on training knowledge. If the code uses a specific SDK or service, look up the official documentation (using MCP tools where available) and verify the security-relevant usage pattern is correct. Incorrect API usage that bypasses security controls is a **Critical** finding.
 - **Defense-in-depth counts**: a control missing a second layer of enforcement (e.g., RLS present but no CHECK constraint) is a Medium finding even if the first layer is sound.

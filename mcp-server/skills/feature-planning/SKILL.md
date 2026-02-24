@@ -31,6 +31,7 @@ Do NOT skip clarification. A plan built on wrong assumptions wastes more time th
 - Read the project's SPEC.md, README, CLAUDE.md, and any relevant docs to understand the system's architecture, conventions, and existing features.
 - Explore the codebase areas the feature will touch. Identify existing patterns, data models, state management, and UI conventions.
 - Map out what already exists that the feature will interact with or depend on.
+- **API/tech stack verification**: If the feature involves specific APIs, SDKs, or third-party services, look up the official documentation directly before designing anything. Check if available MCP tools (Supabase, Vercel, etc.) can accelerate this lookup. Never assume correct API usage from training knowledge alone — docs may have changed and wrong API usage produces security holes, not just bugs.
 - Output: A brief summary of the current system context relevant to this feature.
 
 ### 2. Clarify Requirements
@@ -235,5 +236,6 @@ Write the plan to the plan file with this structure:
 - **Be honest about uncertainty**: If you're unsure about something, flag it as an open question rather than making a guess that will become the plan.
 - **Respect existing patterns**: The plan should extend the project's architecture, not fight it. If a new pattern is warranted, justify why.
 - **Scope boundaries**: Clearly state what is and isn't included. Prevent scope creep by naming it.
+- **Verify API usage against official docs**: Before finalizing any design that uses a specific SDK, API, or third-party service, consult the official documentation to confirm correct usage. Use available MCP tools (Supabase, Vercel, etc.) where possible. Do not rely on training knowledge — incorrect API usage is a design flaw that silently becomes a security vulnerability.
 - **Name the pattern**: when the design follows or introduces a named pattern (Repository, Strategy, ADR, C4 Container), name it and note its source so the rationale is traceable.
 - **Delegate to audit skills**: the quality analysis does not re-describe what the audit skills cover in detail — it identifies which domains apply and defers to those skills for the specific checklist.

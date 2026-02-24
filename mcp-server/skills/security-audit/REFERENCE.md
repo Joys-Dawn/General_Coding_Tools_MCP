@@ -590,3 +590,4 @@ logSecurityEvent(userId, "auth_failure"); // rejection silently lost
 await logSecurityEvent(userId, "auth_failure");
 // or: void logSecurityEvent(...).catch(err => console.error("Failed to log:", err));
 ```
+
